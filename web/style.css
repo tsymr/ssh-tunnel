@@ -46,7 +46,7 @@ main.split {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 380px 1fr;
   gap: 14px;
   padding: 14px 20px;
 }
@@ -76,8 +76,8 @@ main.split {
 
 .trow {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 12px;
   border-radius: 10px;
   cursor: pointer;
@@ -86,12 +86,12 @@ main.split {
 }
 .trow:hover { background: var(--panel-2); }
 .trow.selected { background: var(--panel-2); border-color: var(--primary); }
+.trow-top, .trow-bot { display: flex; align-items: center; gap: 8px; }
 .rdot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
 .trow.running .rdot { background: var(--green); box-shadow: 0 0 6px var(--green); }
-.rmain { flex: 1; min-width: 0; }
-.rtitle { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rsub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
-.trow .act-toggle { flex-shrink: 0; }
+.rtitle { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rsub { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rbtns { display: flex; gap: 4px; flex-shrink: 0; }
 
 .empty { text-align: center; color: var(--muted); padding: 40px 16px; font-size: 13px; }
 
@@ -161,13 +161,21 @@ main.split {
 /* 表单模态框 */
 .modal {
   position: fixed; inset: 0; background: rgba(0, 0, 0, .55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   z-index: 50; padding: 24px;
 }
 .modal[hidden] { display: none; }
 .modal-card {
   background: var(--panel); border: 1px solid var(--border);
-  border-radius: 14px; width: 520px; max-width: 100%; max-height: 90vh; overflow: auto;
+  border-radius: 16px; width: 520px; max-width: 100%; max-height: 90vh; overflow: auto;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .55);
+  animation: modalIn .18s ease-out;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(10px) scale(.97); }
+  to { opacity: 1; transform: none; }
 }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -191,6 +199,19 @@ fieldset.radios {
 fieldset legend { font-size: 12px; color: var(--muted); padding: 0 6px; }
 .radio { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
 .form-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.confirm-card { width: 380px; padding: 22px 24px; }
+.confirm-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+.confirm-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex-shrink: 0;
+  box-shadow: 0 0 0 3px rgba(229, 87, 107, .15);
+}
+.confirm-title { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+.confirm-text { margin: 0 0 20px; font-size: 13px; color: var(--muted); line-height: 1.65; }
+.confirm-name { color: var(--text); font-weight: 500; }
+.confirm-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.confirm-actions .btn { min-width: 84px; }
+.btn.danger-fill { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger-fill:hover { background: #d4495b; border-color: #d4495b; }
 
 /* toast */
 .toast {

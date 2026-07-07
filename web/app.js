@@ -33,6 +33,9 @@ function toast(msg, kind = "info") {
 function fmtMode(m) { return m === "remote" ? "远程" : "本地"; }
 function fmtAuth(a) { return a === "password" ? "密码" : "私钥"; }
 function nameOf(t) { return t.label || `${t.user}@${t.host}`; }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 function specOf(t) {
   if (t.forward_mode === "remote") {
@@ -57,10 +60,14 @@ function createRow(t) {
       title: el.querySelector(".rtitle"),
       sub: el.querySelector(".rsub"),
       toggle: el.querySelector(".act-toggle"),
+      edit: el.querySelector(".act-edit"),
+      del: el.querySelector(".act-del"),
     },
   };
   el.addEventListener("click", () => selectTunnel(t.id));
   entry.els.toggle.addEventListener("click", (ev) => { ev.stopPropagation(); onToggle(t.id); });
+  entry.els.edit.addEventListener("click", (ev) => { ev.stopPropagation(); openForm(entry.tunnel); });
+  entry.els.del.addEventListener("click", (ev) => { ev.stopPropagation(); onDelete(entry.tunnel); });
   rowNodes[t.id] = entry;
   return entry;
 }
@@ -146,18 +153,36 @@ async function onToggle(id) {
   }
 }
 
-async function onDelete() {
-  const t = tunnels.find((x) => x.id === selectedId);
+// 删除二次确认：弹出确认窗口，点击“确认删除”才真正执行。
+const confirmModal = $("#confirmModal");
+let pendingDeleteTunnel = null;
+
+function askDelete(t) {
+  pendingDeleteTunnel = t;
+  $("#confirmText").innerHTML =
+    `确定删除「<span class="confirm-name">${escapeHtml(nameOf(t))}</span>」吗?删除后无法恢复。`;
+  confirmModal.hidden = false;
+}
+function closeConfirm() {
+  confirmModal.hidden = true;
+  pendingDeleteTunnel = null;
+}
+async function doDelete() {
+  const t = pendingDeleteTunnel;
+  closeConfirm();
   if (!t) return;
-  if (!confirm(`确定删除隧道「${nameOf(t)}」？`)) return;
   try {
     await api(`/api/tunnels/${t.id}`, { method: "DELETE" });
     toast("已删除");
-    clearSelection();
+    if (t.id === selectedId) clearSelection();
     await refresh();
   } catch (e) {
     toast(e.message, "error");
   }
+}
+function onDelete(t) {
+  if (!t) return;
+  askDelete(t);
 }
 
 // ===== 选中 & 右侧详情/日志 =====
@@ -176,8 +201,6 @@ function clearSelection() {
   $("#detailSpec").textContent = "从左侧选择一个隧道查看详情与日志";
   $("#logBox").textContent = "";
   $("#btnRefreshLog").disabled = true;
-  $("#btnDetailEdit").disabled = true;
-  $("#btnDetailDelete").disabled = true;
 }
 
 function updateDetail() {
@@ -189,8 +212,6 @@ function updateDetail() {
   if (t.auth_method === "password" && !t.auth_ready) meta.push("⚠需要密码");
   $("#detailSpec").textContent = meta.join("   ·   ");
   $("#btnRefreshLog").disabled = false;
-  $("#btnDetailEdit").disabled = false;
-  $("#btnDetailDelete").disabled = false;
 }
 
 function startLogPolling(id) {
@@ -217,11 +238,7 @@ async function loadLog() {
 }
 
 $("#btnRefreshLog").addEventListener("click", loadLog);
-$("#btnDetailEdit").addEventListener("click", () => {
-  const t = tunnels.find((x) => x.id === selectedId);
-  if (t) openForm(t);
-});
-$("#btnDetailDelete").addEventListener("click", onDelete);
+$("#btnConfirmDelete").addEventListener("click", doDelete);
 
 // ===== 表单 =====
 const formModal = $("#formModal");
@@ -322,8 +339,9 @@ $("#btnInstall").addEventListener("click", () => {
 });
 
 document.addEventListener("click", (e) => {
-  if (e.target.matches("[data-close]")) closeForm();
+  if (e.target.matches("[data-close]")) { closeForm(); closeConfirm(); }
   if (e.target === formModal) closeForm();
+  if (e.target === confirmModal) closeConfirm();
 });
 
 (async () => {
