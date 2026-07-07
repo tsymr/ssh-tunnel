@@ -43,7 +43,16 @@ function specOf(t) {
     return `${t.host}:${t.remote_port} → 127.0.0.1:${t.local_port}`;
   }
   const bind = t.bind_addr || "127.0.0.1";
-  return `${bind}:${t.local_port} → ${t.host}:127.0.0.1:${t.remote_port}`;
+  return `${bind}:${t.local_port} → ${t.host}:${t.remote_port}`;
+}
+
+function rowSpecOf(t) {
+  if (t.forward_mode === "remote") {
+    const bind = t.bind_addr ? `${t.bind_addr}:` : "";
+    return `${fmtMode(t.forward_mode)} · ${t.host}:${bind}${t.remote_port} → 本机:${t.local_port}`;
+  }
+  const bind = t.bind_addr || "127.0.0.1";
+  return `${fmtMode(t.forward_mode)} · ${bind}:${t.local_port} → ${t.host}:${t.remote_port}`;
 }
 
 // ===== 左侧列表（行节点复用，避免刷新跳动）=====
@@ -78,8 +87,9 @@ function updateRow(entry, t) {
   const e = entry.els;
   e.row.classList.toggle("running", running);
   e.row.classList.toggle("selected", t.id === selectedId);
+  e.row.title = specOf(t);
   e.title.textContent = nameOf(t);
-  const bits = [`${fmtMode(t.forward_mode)} · ${t.local_port}→${t.remote_port}`];
+  const bits = [rowSpecOf(t)];
   if (running) bits.push(`PID ${t.pid}`);
   if (t.auth_method === "password" && !t.auth_ready) bits.push("⚠需密码");
   e.sub.textContent = bits.join(" · ");
