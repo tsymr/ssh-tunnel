@@ -88,6 +88,7 @@ func run(port int, dataDir string, serve bool) error {
 			t := p
 			t.ID = genID()
 			t.CreatedAt = base + int64(i) // 保持预设导入顺序
+			t.Order = t.CreatedAt
 			if err := store.Put(&t); err != nil {
 				return err
 			}

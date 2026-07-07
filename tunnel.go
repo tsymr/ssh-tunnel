@@ -18,6 +18,7 @@ type Tunnel struct {
 	ID          string `json:"id"`
 	Label       string `json:"label"`
 	CreatedAt   int64  `json:"created_at"`
+	Order       int64  `json:"order"`
 	User        string `json:"user"`
 	Host        string `json:"host"`
 	LocalPort   int    `json:"local_port"`
@@ -29,6 +30,23 @@ type Tunnel struct {
 }
 
 func (t *Tunnel) clone() *Tunnel { c := *t; return &c }
+
+func tunnelOrder(t *Tunnel) int64 {
+	if t.Order != 0 {
+		return t.Order
+	}
+	return t.CreatedAt
+}
+
+func lessTunnelOrder(a, b *Tunnel) bool {
+	if tunnelOrder(a) != tunnelOrder(b) {
+		return tunnelOrder(a) < tunnelOrder(b)
+	}
+	if a.CreatedAt != b.CreatedAt {
+		return a.CreatedAt < b.CreatedAt
+	}
+	return a.ID < b.ID
+}
 
 func (t *Tunnel) LabelOrID() string {
 	if t.Label != "" {
@@ -174,12 +192,9 @@ func commandExists(name string) bool {
 
 func (m *Manager) List() []*TunnelStatus {
 	tunnels := m.store.All()
-	// 按创建时间排序；相同时间用 ID 作稳定 tiebreaker，避免刷新时顺序跳动。
+	// 按用户排序字段排序；旧数据没有 order 时回退到 created_at。
 	sort.SliceStable(tunnels, func(i, j int) bool {
-		if tunnels[i].CreatedAt != tunnels[j].CreatedAt {
-			return tunnels[i].CreatedAt < tunnels[j].CreatedAt
-		}
-		return tunnels[i].ID < tunnels[j].ID
+		return lessTunnelOrder(tunnels[i], tunnels[j])
 	})
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -226,6 +241,9 @@ func (m *Manager) Create(t *Tunnel, password string) error {
 	if t.CreatedAt == 0 {
 		t.CreatedAt = time.Now().UnixNano()
 	}
+	if t.Order == 0 {
+		t.Order = t.CreatedAt
+	}
 	for _, ex := range m.store.All() {
 		if ex.LocalPort == t.LocalPort {
 			return fmt.Errorf("本地端口 %d 已被隧道「%s」占用", t.LocalPort, ex.LabelOrID())
@@ -250,6 +268,7 @@ func (m *Manager) Update(id string, t *Tunnel, password string) error {
 	}
 	t.ID = id
 	t.CreatedAt = old.CreatedAt // 编辑不重置创建时间
+	t.Order = old.Order         // 编辑不重置手动排序
 	if err := t.validate(); err != nil {
 		return err
 	}
@@ -271,6 +290,10 @@ func (m *Manager) Update(id string, t *Tunnel, password string) error {
 	}
 	m.mu.Unlock()
 	return nil
+}
+
+func (m *Manager) Reorder(ids []string) error {
+	return m.store.Reorder(ids)
 }
 
 // Delete 删除隧道定义；运行中则拒绝。

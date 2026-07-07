@@ -29,6 +29,7 @@ func (s *Server) router() http.Handler {
 
 	mux.HandleFunc("GET /api/tunnels", s.handleList)
 	mux.HandleFunc("POST /api/tunnels", s.handleCreate)
+	mux.HandleFunc("POST /api/tunnels/reorder", s.handleReorder)
 	mux.HandleFunc("GET /api/tunnels/{id}", s.handleGet)
 	mux.HandleFunc("PUT /api/tunnels/{id}", s.handleUpdate)
 	mux.HandleFunc("DELETE /api/tunnels/{id}", s.handleDelete)
@@ -131,6 +132,23 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	st, _ := s.mgr.StatusOf(id)
 	writeJSON(w, st, 200)
+}
+
+type reorderRequest struct {
+	IDs []string `json:"ids"`
+}
+
+func (s *Server) handleReorder(w http.ResponseWriter, r *http.Request) {
+	var req reorderRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	if err := s.mgr.Reorder(req.IDs); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, s.mgr.List(), 200)
 }
 
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {

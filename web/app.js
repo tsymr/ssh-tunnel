@@ -57,6 +57,7 @@ function rowSpecOf(t) {
 
 // ===== 左侧列表（行节点复用，避免刷新跳动）=====
 const rowNodes = {}; // id -> { el, tunnel, els }
+const dragState = { id: null, overId: null, after: false, saving: false };
 
 function createRow(t) {
   const el = rowTpl.content.firstElementChild.cloneNode(true);
@@ -66,6 +67,7 @@ function createRow(t) {
     els: {
       row: el,
       dot: el.querySelector(".rdot"),
+      handle: el.querySelector(".drag-handle"),
       title: el.querySelector(".rtitle"),
       sub: el.querySelector(".rsub"),
       toggle: el.querySelector(".act-toggle"),
@@ -74,6 +76,12 @@ function createRow(t) {
     },
   };
   el.addEventListener("click", () => selectTunnel(t.id));
+  entry.els.handle.addEventListener("click", (ev) => ev.stopPropagation());
+  entry.els.handle.addEventListener("dragstart", (ev) => onDragStart(ev, entry));
+  entry.els.handle.addEventListener("dragend", onDragEnd);
+  entry.els.row.addEventListener("dragover", (ev) => onDragOver(ev, entry));
+  entry.els.row.addEventListener("dragleave", (ev) => onDragLeave(ev, entry));
+  entry.els.row.addEventListener("drop", (ev) => onDrop(ev, entry));
   entry.els.toggle.addEventListener("click", (ev) => { ev.stopPropagation(); onToggle(t.id); });
   entry.els.edit.addEventListener("click", (ev) => { ev.stopPropagation(); openForm(entry.tunnel); });
   entry.els.del.addEventListener("click", (ev) => { ev.stopPropagation(); onDelete(entry.tunnel); });
@@ -95,6 +103,93 @@ function updateRow(entry, t) {
   e.sub.textContent = bits.join(" · ");
   e.toggle.textContent = running ? "停止" : "启动";
   e.toggle.classList.toggle("primary", !running);
+}
+
+function clearDropMarkers() {
+  for (const id in rowNodes) {
+    rowNodes[id].els.row.classList.remove("dragging", "drop-before", "drop-after");
+  }
+}
+
+function sameOrder(a, b) {
+  return a.length === b.length && a.every((t, i) => t.id === b[i].id);
+}
+
+function reorderedTunnels(dragId, targetId, after) {
+  if (!dragId || !targetId || dragId === targetId) return tunnels;
+  const next = [...tunnels];
+  const from = next.findIndex((t) => t.id === dragId);
+  if (from === -1) return tunnels;
+  const [moved] = next.splice(from, 1);
+  let to = next.findIndex((t) => t.id === targetId);
+  if (to === -1) return tunnels;
+  if (after) to += 1;
+  next.splice(to, 0, moved);
+  return next;
+}
+
+function onDragStart(ev, entry) {
+  dragState.id = entry.tunnel.id;
+  dragState.overId = null;
+  dragState.after = false;
+  ev.dataTransfer.effectAllowed = "move";
+  ev.dataTransfer.setData("text/plain", entry.tunnel.id);
+  entry.els.row.classList.add("dragging");
+}
+
+function onDragOver(ev, entry) {
+  if (!dragState.id || dragState.id === entry.tunnel.id) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = "move";
+  const rect = entry.els.row.getBoundingClientRect();
+  const after = ev.clientY > rect.top + rect.height / 2;
+  if (dragState.overId !== entry.tunnel.id || dragState.after !== after) {
+    clearDropMarkers();
+    rowNodes[dragState.id]?.els.row.classList.add("dragging");
+    entry.els.row.classList.add(after ? "drop-after" : "drop-before");
+    dragState.overId = entry.tunnel.id;
+    dragState.after = after;
+  }
+}
+
+function onDragLeave(ev, entry) {
+  if (entry.els.row.contains(ev.relatedTarget)) return;
+  entry.els.row.classList.remove("drop-before", "drop-after");
+}
+
+async function onDrop(ev, entry) {
+  if (!dragState.id) return;
+  ev.preventDefault();
+  const original = [...tunnels];
+  const next = reorderedTunnels(dragState.id, entry.tunnel.id, dragState.after);
+  clearDropMarkers();
+  dragState.id = null;
+  if (sameOrder(original, next)) return;
+
+  tunnels = next;
+  render();
+  dragState.saving = true;
+  try {
+    tunnels = await api("/api/tunnels/reorder", {
+      method: "POST",
+      body: JSON.stringify({ ids: next.map((t) => t.id) }),
+    });
+    render();
+    if (selectedId) updateDetail();
+    toast("排序已保存");
+  } catch (e) {
+    tunnels = original;
+    render();
+    toast("排序保存失败：" + e.message, "error");
+  } finally {
+    dragState.saving = false;
+  }
+}
+
+function onDragEnd() {
+  clearDropMarkers();
+  dragState.id = null;
+  dragState.overId = null;
 }
 
 function render() {
@@ -135,16 +230,18 @@ async function refresh() {
   try {
     const [s, list] = await Promise.all([api("/api/status"), api("/api/tunnels")]);
     status = s;
-    tunnels = list;
     const installedTxt = s.service_installed ? "· 已安装服务" : "· 未安装服务";
     $("#meta").textContent = `127.0.0.1:${s.port} · 运行中 ${s.running}/${s.total} · sshpass ${s.sshpass_available ? "可用" : "未装"} ${installedTxt}`;
     $("#sidebarCount").textContent = `${s.running}/${s.total}`;
     $("#btnInstall").hidden = s.service_installed;
-    render();
-    if (selectedId) updateDetail();
-    if (pendingSelectId && rowNodes[pendingSelectId]) {
-      selectTunnel(pendingSelectId);
-      pendingSelectId = null;
+    if (!dragState.id && !dragState.saving) {
+      tunnels = list;
+      render();
+      if (selectedId) updateDetail();
+      if (pendingSelectId && rowNodes[pendingSelectId]) {
+        selectTunnel(pendingSelectId);
+        pendingSelectId = null;
+      }
     }
   } catch (e) {
     toast("加载失败：" + e.message, "error");

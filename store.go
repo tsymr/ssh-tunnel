@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 )
 
@@ -40,6 +42,9 @@ func (s *Store) Load() error {
 		if t.CreatedAt == 0 {
 			t.CreatedAt = legacyBase + int64(i)
 		}
+		if t.Order == 0 {
+			t.Order = t.CreatedAt
+		}
 		s.tunnels[t.ID] = t
 	}
 	return nil
@@ -50,6 +55,9 @@ func (s *Store) saveLocked() error {
 	for _, t := range s.tunnels {
 		list = append(list, t)
 	}
+	sort.SliceStable(list, func(i, j int) bool {
+		return lessTunnelOrder(list[i], list[j])
+	})
 	data, err := json.MarshalIndent(list, "", "  ")
 	if err != nil {
 		return err
@@ -88,6 +96,31 @@ func (s *Store) Put(t *Tunnel) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.tunnels[t.ID] = t.clone()
+	return s.saveLocked()
+}
+
+func (s *Store) Reorder(ids []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(ids) != len(s.tunnels) {
+		return fmt.Errorf("排序列表数量不匹配")
+	}
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id == "" {
+			return fmt.Errorf("排序列表包含空 ID")
+		}
+		if seen[id] {
+			return fmt.Errorf("排序列表包含重复 ID: %s", id)
+		}
+		if _, ok := s.tunnels[id]; !ok {
+			return fmt.Errorf("隧道不存在: %s", id)
+		}
+		seen[id] = true
+	}
+	for i, id := range ids {
+		s.tunnels[id].Order = int64(i + 1)
+	}
 	return s.saveLocked()
 }
 
