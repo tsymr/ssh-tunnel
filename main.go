@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 )
 
@@ -55,6 +56,14 @@ func run(port int, dataDir string, serve bool) error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return err
 	}
+	// 单实例锁：防止多个实例并发读写同一份 tunnels.json
+	// （曾因前台实例 + launchd 服务同时运行导致数据被覆盖）。
+	lockFile, err := acquireLock(dataDir)
+	if err != nil {
+		return err
+	}
+	defer lockFile.Close()
+
 	storePath := filepath.Join(dataDir, "tunnels.json")
 	logDir := filepath.Join(dataDir, "logs")
 
@@ -62,7 +71,17 @@ func run(port int, dataDir string, serve bool) error {
 	if err := store.Load(); err != nil {
 		return fmt.Errorf("加载配置失败: %w", err)
 	}
-	// 首次运行：导入预设隧道，开箱即用。
+
+	mgr := NewManager(store, logDir)
+	srv := newServer(mgr, dataDir, port)
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("监听 %s 失败（端口被占，可能已有实例在运行）: %w", addr, err)
+	}
+
+	// 只有成功绑定端口的实例才允许写数据，避免端口冲突时反复重启的实例覆盖配置。
 	if !fileExists(storePath) {
 		base := time.Now().UnixNano()
 		for i, p := range builtinPresets {
@@ -75,20 +94,26 @@ func run(port int, dataDir string, serve bool) error {
 		}
 	}
 
-	mgr := NewManager(store, logDir)
-	srv := newServer(mgr, dataDir, port)
-
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("监听 %s 失败: %w", addr, err)
-	}
 	url := "http://" + addr
 	log.Printf("SSH Tunnel %s 正在监听 %s", version, url)
 	if !serve {
 		go openBrowser(url)
 	}
 	return http.Serve(ln, srv.router())
+}
+
+// acquireLock 对数据目录加排他文件锁，确保同一时刻只有一个实例在写数据。
+func acquireLock(dataDir string) (*os.File, error) {
+	lockPath := filepath.Join(dataDir, ".lock")
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("无法创建锁文件 %s: %w", lockPath, err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("另一个实例正在运行（已持有 %s 的锁）；请勿同时运行前台实例与系统服务", lockPath)
+	}
+	return f, nil
 }
 
 func defaultDataDir() string {
