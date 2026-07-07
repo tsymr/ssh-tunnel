@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSH Tunnel</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>SSH Tunnel</h1>
+      <span id="meta" class="meta">加载中…</span>
+    </div>
+    <div class="actions">
+      <button id="btnInstall" class="btn ghost" hidden>安装为系统服务</button>
+      <button id="btnNew" class="btn primary">＋ 新增隧道</button>
+    </div>
+  </header>
+
+  <main class="split">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span>端口转发</span>
+        <span id="sidebarCount" class="count">0/0</span>
+      </div>
+      <div id="tunnels" class="tlist"></div>
+    </aside>
+
+    <section class="detail">
+      <div class="detail-head">
+        <div class="detail-title">
+          <span id="detailName" class="dname">未选择隧道</span>
+          <span id="detailSpec" class="dspec">从左侧选择一个隧道查看详情与日志</span>
+        </div>
+        <div class="detail-actions">
+          <button id="btnRefreshLog" class="btn ghost small" disabled>刷新日志</button>
+          <button id="btnDetailEdit" class="btn ghost small" disabled>编辑</button>
+          <button id="btnDetailDelete" class="btn danger small" disabled>删除</button>
+        </div>
+      </div>
+      <pre id="logBox" class="logbox"></pre>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- 隧道表单 -->
+  <div id="formModal" class="modal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="formTitle">新增隧道</h2>
+        <button class="iconbtn" data-close>✕</button>
+      </div>
+      <form id="tunnelForm" class="form">
+        <div class="row">
+          <label>预设快选
+            <select id="preset">
+              <option value="">— 不使用预设 —</option>
+            </select>
+          </label>
+          <label>名称
+            <input type="text" name="label" placeholder="例如：开发机 8088（不填则用 user@host）">
+          </label>
+        </div>
+        <div class="row">
+          <label>服务器地址
+            <input type="text" name="host" placeholder="1.2.3.4" required>
+          </label>
+          <label>用户名
+            <input type="text" name="user" placeholder="root" required>
+          </label>
+        </div>
+        <div class="row">
+          <label>本地端口
+            <input type="number" name="local_port" min="1" max="65535" required>
+          </label>
+          <label>服务器端口
+            <input type="number" name="remote_port" min="1" max="65535" required>
+          </label>
+        </div>
+        <fieldset class="row radios">
+          <legend>转发方向</legend>
+          <label class="radio"><input type="radio" name="forward_mode" value="local" checked> 本地 (-L)：本地 → 服务器</label>
+          <label class="radio"><input type="radio" name="forward_mode" value="remote"> 远程 (-R)：服务器 → 本地</label>
+        </fieldset>
+        <div class="row">
+          <label>绑定地址（留空用默认）
+            <input type="text" name="bind_addr" placeholder="127.0.0.1">
+          </label>
+          <label>私钥文件（可选）
+            <input type="text" name="key_file" placeholder="~/.ssh/id_rsa">
+          </label>
+        </div>
+        <fieldset class="row radios">
+          <legend>认证方式</legend>
+          <label class="radio"><input type="radio" name="auth_method" value="key" checked> 私钥</label>
+          <label class="radio"><input type="radio" name="auth_method" value="password"> 密码（需 sshpass）</label>
+        </fieldset>
+        <label id="passwordWrap" class="full" hidden>密码
+          <input type="password" name="password" placeholder="编辑时留空表示不修改">
+        </label>
+        <div class="form-foot">
+          <button type="button" class="btn ghost" data-close>取消</button>
+          <button type="submit" class="btn primary">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <template id="rowTpl">
+    <div class="trow">
+      <span class="rdot"></span>
+      <div class="rmain">
+        <div class="rtitle"></div>
+        <div class="rsub"></div>
+      </div>
+      <button class="btn small act-toggle">启动</button>
+    </div>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>
